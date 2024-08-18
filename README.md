@@ -1,8 +1,9 @@
 -- How to run 
 
--- node index.js
 -- npm install
 -- npm install multer
+-- node index.js
+
 
 
 -- nodeDB
