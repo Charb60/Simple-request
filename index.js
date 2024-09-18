@@ -20,17 +20,18 @@ const connection = mysql.createConnection({
 });
 
 // Configure multer for file uploads
-const storage = multer.diskStorage({
+const storage = multer.diskStorage({//กำหนดการตั้งค่าการจัดเก็บไฟล์ที่ถูกอัปโหลดโดย multer
     destination: function (req, file, cb) {
-        cb(null, 'uploads/'); // Specify the folder for storing images
+        cb(null, 'uploads/'); //กำหนดโฟลเดอร์ที่ไฟล์จะถูกบันทึกลงไป ex บันทึกเก็บรูปภาพไปที่ ไฟล์uploads 
     },
     filename: function (req, file, cb) {
-        cb(null, Date.now() + path.extname(file.originalname)); // Rename files to avoid conflicts
+        cb(null, Date.now() + path.extname(file.originalname)); //กำหนดชื่อไฟล์
     }
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({ storage: storage });//ตั้งค่าการจัดเก็บที่กำหนดไว้ในตัวแปร storage ใช้เพื่อจัดการการอัปโหลดไฟล์ในแอปพลิเคชัน
 
+//เชื่อมต่อกับ Database 
 connection.connect(err => {
     if (err) {
         console.error('error connecting: ' + err.stack);
@@ -40,15 +41,15 @@ connection.connect(err => {
 });
 
 // All data in users table
-app.get('/api/users', (req, res) => {
+app.get('/api/users', (req, res) => {  //กำหนด route GET request มายัง URL /api/users
     const sql = 'SELECT * FROM users';
-    connection.query(sql, (err, results) => {
+    connection.query(sql, (err, results) => { //DB connection
         if (err) throw err;
         res.send(results);
     });
 });
 // POST users request images multiple file 
-app.post('/api/userspost', upload.array('images', 10), (req, res) => {
+app.post('/api/userspost', upload.array('images', 10), (req, res) => { //upload.array('images', 10)อัปโหลดได้สูงสุด 10 ไฟล์)
     const { id, title, body } = req.body;
     const files = req.files;
 
@@ -57,13 +58,13 @@ app.post('/api/userspost', upload.array('images', 10), (req, res) => {
         return res.status(400).send("No files uploaded");
     }
 
-    // Debugging: Log file paths
-    files.forEach(file => {
-        console.log(`File uploaded: ${file.path}`);
+    // Debugging: Log file paths  
+    files.forEach(file => {//ลูปผ่านไฟล์ทั้งหมดที่ถูกอัปโหลดและพิมพ์ตำแหน่งของไฟล์ปที่คอนโซลเพื่อการตรวจสอบ (debugging)
+        console.log(`File uploaded: ${file.path}`); 
     });
 
     // Store image file paths in the database
-    const imagePaths = files.map(file => file.path);
+    const imagePaths = files.map(file => file.path);//array imagePaths ที่เก็บตำแหน่งของไฟล์ทั้งหมดโดยใช้ .map() ฟังก์ชัน ซึ่งจะแปลงข้อมูลของไฟล์ที่อัปโหลดให้กลายเป็นตำแหน่งเก็บไฟล์ (path)
 
     const sql = 'INSERT INTO users (id, title, body, images) VALUES (?, ?, ?, ?)';
     const values = [id, title, body, JSON.stringify(imagePaths)];
@@ -76,6 +77,47 @@ app.post('/api/userspost', upload.array('images', 10), (req, res) => {
         }
         console.log('Inserted user successfully');
         res.send(result);
+    });
+});
+
+// PUT request to update a user and optionally replace images
+app.put('/api/users/:id', upload.array('images', 10), (req, res) => {
+    const { id } = req.params; // ดึง ID จาก URL params
+    const { title, body } = req.body; // ดึงข้อมูลจาก body ของ request
+    const files = req.files; // ดึงไฟล์ที่อัปโหลดมา
+
+    // ตรวจสอบว่าฟิลด์ title และ body ถูกส่งมาหรือไม่
+    if (!title || !body) {
+        return res.status(400).send('Missing required fields');
+    }
+
+    // ตรวจสอบว่ามีไฟล์รูปภาพที่ถูกอัปโหลดมาหรือไม่
+    let imagePaths;
+    if (files && files.length > 0) {
+        // หากมีไฟล์รูปภาพ ให้บันทึกตำแหน่งไฟล์
+        imagePaths = files.map(file => file.path);
+        // imagePaths = files.map(file => file.filename); 
+
+    } else {
+        // หากไม่มีไฟล์ใหม่ ให้ใช้รูปภาพเดิม
+        imagePaths = req.body.images ? JSON.parse(req.body.images) : [];
+    }
+
+    // สร้างคำสั่ง SQL สำหรับการอัปเดตข้อมูล
+    const sql = 'UPDATE users SET title = ?, body = ?, images = ? WHERE id = ?';
+    const values = [title, body, JSON.stringify(imagePaths), id];
+
+    connection.query(sql, values, (err, result) => {
+        if (err) {
+            console.error('Error updating user:', err);
+            res.status(500).send('Error updating user');
+            return;
+        }
+        if (result.affectedRows === 0) {
+            return res.status(404).send('User not found');
+        }
+        console.log('Updated user successfully');
+        res.send('User updated successfully');
     });
 });
 
